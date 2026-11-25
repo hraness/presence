@@ -8,8 +8,14 @@ version=$(sed -n 's/^public let version = "\(.*\)"$/\1/p' Sources/PresenceCore/C
 [ -n "$version" ] || { echo "release: cannot read version from Sources/PresenceCore/CLI.swift" >&2; exit 1; }
 
 # Multi-architecture builds need Xcode, not only the Command Line Tools.
-if [ -z "${DEVELOPER_DIR:-}" ] && [ -d /Applications/Xcode.app/Contents/Developer ]; then
-  export DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer
+if [ -z "${DEVELOPER_DIR:-}" ]; then
+  case "$(xcode-select -p 2>/dev/null)" in
+    *.app/Contents/Developer) ;;
+    *)
+      xcode=$(find /Applications -maxdepth 1 -name 'Xcode*.app' | sort -V | tail -1)
+      if [ -n "$xcode" ]; then export DEVELOPER_DIR="$xcode/Contents/Developer"; fi
+      ;;
+  esac
 fi
 
 swift build -c release --arch arm64 --arch x86_64

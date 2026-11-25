@@ -164,7 +164,7 @@ call: camera in use
 
 ```sh
 swift build -c release
-swift test                 # needs Xcode (swift-testing), not only the Command Line Tools
+scripts/test.sh            # swift test with an Xcode toolchain (swift-testing is not in the Command Line Tools)
 ./scripts/release.sh       # universal arm64 + x86_64 binary and tarball with sha256 in dist/
 ```
 

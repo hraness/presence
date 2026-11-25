@@ -58,7 +58,7 @@ No. Every signal comes from an API that works without a TCC grant, so it never s
 
 ## Contributing
 
-Issues and pull requests are welcome; `swift test` (with Xcode) must pass. Security reports: see [SECURITY.md](SECURITY.md).
+Issues and pull requests are welcome; `scripts/test.sh` (swift test with Xcode) must pass. Security reports: see [SECURITY.md](SECURITY.md).
 
 ## License
 
