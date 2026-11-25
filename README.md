@@ -11,7 +11,6 @@ Use it to gate builds, tests, backups, notifications and agent work so they neve
 ```sh
 curl -fsSL https://github.com/hraness/presence/releases/download/v0.1.0/presence-0.1.0-macos-universal.tar.gz | tar -xz
 sudo install presence-0.1.0-macos-universal/presence /usr/local/bin/
-brew install hraness/tap/presence   # soon
 swift build -c release              # from source: .build/release/presence
 ```
 
@@ -40,7 +39,7 @@ Exit codes: 0 ok, 1 failure, 2 bad arguments, 3 no GUI session (for example over
 
 ## Compared with
 
-beengone reports idle time only; dstat and amiunlocked report lock state only; OverSight, On Air and Micro Snitch are GUI apps for the microphone or camera; jonesiscoding/available covers interruptibility but needs root and reads files. presence reads all of these signals in one call, with no root and no prompts.
+[beengone](https://brettterpstra.com/projects/beengone/) reports idle time only; [dstat](https://github.com/luckman212/dstat) and [amiunlocked](https://github.com/raygesualdo/amiunlocked) report lock state only; [OverSight](https://objective-see.org/products/oversight.html), [On Air](https://github.com/maxchuquimia/onair) and Micro Snitch are GUI apps for the microphone or camera; [available](https://github.com/jonesiscoding/available) covers interruptibility but needs root and reads files. presence reads all of these signals in one call, with no root and no prompts.
 
 ## FAQ
 
