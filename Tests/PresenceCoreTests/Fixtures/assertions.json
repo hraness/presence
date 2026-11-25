@@ -1,0 +1,20 @@
+{
+  "keyIdleSeconds": 1200,
+  "inputIdleSeconds": 1200,
+  "assertions": [
+    { "pid": 1908, "process": "Amphetamine", "assertionName": "Amphetamine (Single-Use - Display)", "type": "PreventUserIdleDisplaySleep", "since": 1000 },
+    { "pid": 500, "process": "Google Chrome Helper", "assertionName": "Video Wake Lock", "type": "PreventUserIdleDisplaySleep", "since": 2000 },
+    { "pid": 700, "process": "node", "assertionName": "Playwright media", "type": "NoDisplaySleepAssertion", "since": 3000 },
+    { "pid": 800, "process": "Simulator", "assertionName": "app under test", "type": "PreventUserIdleDisplaySleep", "since": 4000 },
+    { "pid": 430, "process": "powerd", "assertionName": "Powerd - Prevent sleep while display is on", "type": "PreventUserIdleSystemSleep", "since": 500 }
+  ],
+  "processes": {
+    "1908": { "name": "Amphetamine", "ppid": 1, "startedAtMs": 100 },
+    "500": { "name": "Google Chrome Helper", "ppid": 499, "startedAtMs": 1500 },
+    "499": { "name": "Google Chrome", "ppid": 1, "startedAtMs": 1400 },
+    "700": { "name": "node", "ppid": 650, "startedAtMs": 2900 },
+    "650": { "name": "claude", "ppid": 1, "startedAtMs": 2500 },
+    "800": { "name": "Simulator", "ppid": 790, "startedAtMs": 3900 },
+    "790": { "name": "xctest-runner", "ppid": 1, "startedAtMs": 3800 }
+  }
+}

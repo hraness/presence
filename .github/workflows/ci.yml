@@ -1,0 +1,36 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-and-test:
+    name: Build and test
+    # GitHub-hosted macOS runners are not available to this org; use the self-hosted Macs.
+    runs-on: [self-hosted, hraness-mac-build]
+    timeout-minutes: 20
+    env:
+      # swift-testing and universal builds need Xcode; the Command Line Tools alone lack them.
+      DEVELOPER_DIR: /Applications/Xcode.app/Contents/Developer
+    steps:
+      - uses: actions/checkout@v4
+      - name: Toolchain
+        run: swift --version
+      - name: Build
+        run: swift build
+      - name: Test
+        run: swift test
+      - name: Release packaging (not published)
+        run: ./scripts/release.sh
+      - name: Smoke test with a fixture
+        run: |
+          PRESENCE_FIXTURE=Tests/PresenceCoreTests/Fixtures/idle.json dist/presence-*-macos-universal/presence --json
