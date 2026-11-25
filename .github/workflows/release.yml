@@ -24,9 +24,17 @@ jobs:
           persist-credentials: false
       - name: Select Xcode
         run: |
+          # Newest versioned Xcode on the image, else Xcode.app, else the image default. Never a fixed path.
           xcode=$(find /Applications -maxdepth 1 -name "Xcode_*.app" | sort -V | tail -1)
-          echo "DEVELOPER_DIR=$xcode/Contents/Developer" >> "$GITHUB_ENV"
-          echo "Using $xcode"
+          [ -n "$xcode" ] || { [ -d /Applications/Xcode.app ] && xcode=/Applications/Xcode.app; }
+          if [ -n "$xcode" ]; then
+            echo "DEVELOPER_DIR=$xcode/Contents/Developer" >> "$GITHUB_ENV"
+            echo "Using $xcode"
+          else
+            echo "Using the image default: $(xcode-select -p)"
+          fi
+      - name: Toolchain
+        run: swift --version
       - name: Check the tag matches the version
         id: version
         run: |
