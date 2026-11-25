@@ -127,6 +127,23 @@ private func reason(_ facts: PresenceFacts) -> String {
         #expect(facts.videoIgnored.first { $0.pid == 1908 }?.ignoredBecause == .keepAwake)
     }
 
+    @Test func ignoreProcessExtendsAgents() throws {
+        let facts = try load("assertions", SampleOptions(filter: VideoFilterOptions(ignoreProcesses: ["xctest-runner"])))
+        #expect(facts.video?.map(\.pid) == [500])
+        #expect(facts.videoIgnored.first { $0.pid == 800 }?.ignoredBecause == .agent)
+    }
+
+    @Test func defaultAgentsAreGeneric() {
+        #expect(agentProcesses == ["claude", "codex", "cursor-agent", "xcodebuild"])
+        let raw = [RawAssertion(pid: 20, process: "Safari", assertionName: "v", type: "PreventUserIdleDisplaySleep", since: nil)]
+        let table: [Int32: ProcessInfoRecord] = [
+            20: ProcessInfoRecord(name: "Safari", ppid: 10, startedAtMs: 0),
+            10: ProcessInfoRecord(name: "host-run", ppid: 1, startedAtMs: 0),
+        ]
+        #expect(filterVideo(raw) { table[$0] }.video.map(\.pid) == [20])
+        #expect(filterVideo(raw, options: VideoFilterOptions(ignoreProcesses: ["host-run"])) { table[$0] }.ignored.map(\.ignoredBecause) == [.agent])
+    }
+
     @Test func unknownOwnerFallsBackToIOPMName() {
         let raw = [RawAssertion(pid: 42, process: "caffeinate", assertionName: "x", type: "PreventUserIdleDisplaySleep", since: nil)]
         #expect(filterVideo(raw) { _ in nil }.ignored.map(\.ignoredBecause) == [.keepAwake])
@@ -200,10 +217,13 @@ private func reason(_ facts: PresenceFacts) -> String {
         let options = try parseOptions([
             "--json", "--key-idle-minutes", "2.5", "--ignore-pids-started-after=1700000000000",
             "--since", "1700000000001", "--ignore-tree", "12", "--ignore-tree", "13", "--device-timeout-ms", "250",
+            "--ignore-process", "host-run", "--ignore-process=ohd",
         ])
         #expect(options.json)
         #expect(options.keyIdleMinutes == 2.5)
-        #expect(options.sample.filter == VideoFilterOptions(ignorePidsStartedAfter: 1_700_000_000_000, since: 1_700_000_000_001, ignoreTrees: [12, 13]))
+        #expect(options.sample.filter == VideoFilterOptions(
+            ignorePidsStartedAfter: 1_700_000_000_000, since: 1_700_000_000_001, ignoreTrees: [12, 13], ignoreProcesses: ["host-run", "ohd"]
+        ))
         #expect(options.sample.deviceTimeoutMs == 250)
     }
 
@@ -219,7 +239,7 @@ private func reason(_ facts: PresenceFacts) -> String {
         ["bogus"], ["--nope"], ["wait"], ["wait", "--until", "sleepy"], ["--until", "idle"], ["watch", "--timeout", "5"],
         ["wait", "--until", "idle", "--every-sample"], ["--key-idle-minutes"], ["--key-idle-minutes", "-1"],
         ["--json", "--json"], ["--ignore-tree", "0"], ["--device-timeout-ms", "0"], ["wait", "--until", "idle", "--timeout", "5x"],
-        ["--interval", "0.01"],
+        ["--interval", "0.01"], ["--ignore-process"], ["--ignore-process", ""],
     ])
     func usageErrors(_ arguments: [String]) {
         #expect(throws: UsageError.self) { try parseOptions(arguments) }

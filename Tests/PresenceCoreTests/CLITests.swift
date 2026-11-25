@@ -91,4 +91,11 @@ struct CLITests {
         let ignored = try #require((parsed["facts"] as? [String: Any])?["videoIgnored"] as? [[String: Any]])
         #expect(ignored.compactMap { $0["ignoredBecause"] as? String } == ["keep-awake", "ignored-tree", "agent", "ignored-tree"])
     }
+
+    @Test func ignoreProcessFlag() throws {
+        let parsed = try object(try run(["--json", "--ignore-process", "xctest-runner"], fixture: "assertions").out)
+        #expect(parsed["reason"] as? String == "video playing in Google Chrome Helper")
+        let ignored = try #require((parsed["facts"] as? [String: Any])?["videoIgnored"] as? [[String: Any]])
+        #expect(ignored.compactMap { $0["ignoredBecause"] as? String } == ["keep-awake", "agent", "agent"])
+    }
 }

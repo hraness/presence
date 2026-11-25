@@ -8,3 +8,6 @@
   through system APIs, with a deadline on every probe and no privacy prompts.
 - JSON schema version 1, with raw facts, `video` and `videoIgnored`.
 - `PRESENCE_FIXTURE` for tests and CI.
+- Built-in agent filter covers claude, codex, cursor-agent and xcodebuild; `--ignore-process NAME`
+  (repeatable) adds more.
+- Release workflow: universal tarball, sha256 and build provenance attestation on a `v*` tag.
