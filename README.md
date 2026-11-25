@@ -9,6 +9,12 @@ Use it to gate builds, tests, backups, notifications and agent work so they neve
 ## Install
 
 ```sh
+brew install hraness/tap/presence
+```
+
+Or download the release:
+
+```sh
 curl -fsSL https://github.com/hraness/presence/releases/download/v0.1.0/presence-0.1.0-macos-universal.tar.gz | tar -xz
 sudo install presence-0.1.0-macos-universal/presence /usr/local/bin/
 swift build -c release              # from source: .build/release/presence
