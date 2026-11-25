@@ -1,0 +1,80 @@
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+  id-token: write
+  attestations: write
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  release:
+    name: Build and publish
+    runs-on: macos-15
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Select Xcode
+        run: |
+          # Newest versioned Xcode on the image, else Xcode.app, else the image default. Never a fixed path.
+          xcode=$(find /Applications -maxdepth 1 -name "Xcode_*.app" | sort -V | tail -1)
+          [ -n "$xcode" ] || { [ -d /Applications/Xcode.app ] && xcode=/Applications/Xcode.app; }
+          if [ -n "$xcode" ]; then
+            echo "DEVELOPER_DIR=$xcode/Contents/Developer" >> "$GITHUB_ENV"
+            echo "Using $xcode"
+          else
+            echo "Using the image default: $(xcode-select -p)"
+          fi
+      - name: Toolchain
+        run: swift --version
+      - name: Check the tag matches the version
+        id: version
+        run: |
+          version=$(sed -n 's/^public let version = "\(.*\)"$/\1/p' Sources/PresenceCore/CLI.swift)
+          if [ "v$version" != "$GITHUB_REF_NAME" ]; then
+            echo "tag $GITHUB_REF_NAME does not match version $version in Sources/PresenceCore/CLI.swift" >&2
+            exit 1
+          fi
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+      - name: Test
+        run: swift test
+      - name: Build universal binary and tarball
+        run: ./scripts/release.sh
+      - name: Extract release notes
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          # The CHANGELOG section for this version: from "## X" up to the next "## ".
+          awk -v v="$VERSION" '
+            /^## / { if (found) exit; if ($2 == v) { found = 1; next } }
+            found { print }
+          ' CHANGELOG.md > dist/notes.md
+          if [ ! -s dist/notes.md ]; then
+            echo "CHANGELOG.md has no '## $VERSION' section" >&2
+            exit 1
+          fi
+          cat dist/notes.md
+      - name: Attest build provenance
+        uses: actions/attest-build-provenance@v2
+        with:
+          subject-path: dist/presence-${{ steps.version.outputs.version }}-macos-universal.tar.gz
+      - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" \
+            --repo "$GITHUB_REPOSITORY" \
+            --title "presence $VERSION" \
+            --notes-file dist/notes.md \
+            --verify-tag \
+            "dist/presence-$VERSION-macos-universal.tar.gz" \
+            "dist/presence-$VERSION-macos-universal.tar.gz.sha256"

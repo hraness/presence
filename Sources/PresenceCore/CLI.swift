@@ -60,6 +60,8 @@ options:
   --ignore-pids-started-after MS      ignore display assertions from processes started at or after MS (epoch ms)
   --since MS                          ignore display assertions created at or after MS (epoch ms)
   --ignore-tree PID                   ignore display assertions from PID and its descendants (repeatable)
+  --ignore-process NAME               treat NAME like the built-in agents (claude, codex, cursor-agent,
+                                      xcodebuild): ignore assertions from it and its descendants (repeatable)
   --device-timeout-ms N               give up on the microphone and camera after N ms; report null (default 1500)
   --interval SECONDS                  poll interval for watch and wait (default 2)
   --every-sample                      watch: print every sample, not only state changes
@@ -115,7 +117,7 @@ public func parseOptions(_ arguments: [String]) throws -> Options {
             flag = String(raw[..<equals])
             rest = [String(raw[raw.index(after: equals)...])] + rest
         }
-        if flag != "--ignore-tree", seen.contains(flag) { throw UsageError("\(flag) given twice") }
+        if flag != "--ignore-tree", flag != "--ignore-process", seen.contains(flag) { throw UsageError("\(flag) given twice") }
         seen.insert(flag)
         switch flag {
         case "-h", "--help": options.command = .help; return options
@@ -128,6 +130,10 @@ public func parseOptions(_ arguments: [String]) throws -> Options {
             let text = try next(flag)
             guard let pid = Int32(text), pid > 0 else { throw UsageError("--ignore-tree needs a pid, got \(text)") }
             options.sample.filter.ignoreTrees.append(pid)
+        case "--ignore-process":
+            let name = try next(flag)
+            guard !name.isEmpty else { throw UsageError("--ignore-process needs a process name") }
+            options.sample.filter.ignoreProcesses.append(name)
         case "--device-timeout-ms":
             let value = try integer(flag, next(flag))
             guard value >= 1, value <= 600_000 else { throw UsageError("--device-timeout-ms must be between 1 and 600000") }

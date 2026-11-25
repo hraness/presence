@@ -15,14 +15,27 @@ concurrency:
 jobs:
   build-and-test:
     name: Build and test
-    # GitHub-hosted macOS runners are not available to this org; use the self-hosted Macs.
-    runs-on: [self-hosted, hraness-mac-build]
+    # GitHub-hosted only: this repo is public, and fork pull requests must never run on self-hosted machines.
+    runs-on: macos-15
+    # Hosted macOS minutes are free only for public repos; skip while the repo is still private.
+    if: ${{ !github.event.repository.private }}
     timeout-minutes: 20
-    env:
-      # swift-testing and universal builds need Xcode; the Command Line Tools alone lack them.
-      DEVELOPER_DIR: /Applications/Xcode.app/Contents/Developer
     steps:
       - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Select Xcode
+        # swift-testing and universal builds need Xcode; use the newest one the image has.
+        run: |
+          # Newest versioned Xcode on the image, else Xcode.app, else the image default. Never a fixed path.
+          xcode=$(find /Applications -maxdepth 1 -name "Xcode_*.app" | sort -V | tail -1)
+          [ -n "$xcode" ] || { [ -d /Applications/Xcode.app ] && xcode=/Applications/Xcode.app; }
+          if [ -n "$xcode" ]; then
+            echo "DEVELOPER_DIR=$xcode/Contents/Developer" >> "$GITHUB_ENV"
+            echo "Using $xcode"
+          else
+            echo "Using the image default: $(xcode-select -p)"
+          fi
       - name: Toolchain
         run: swift --version
       - name: Build
@@ -33,4 +46,5 @@ jobs:
         run: ./scripts/release.sh
       - name: Smoke test with a fixture
         run: |
-          PRESENCE_FIXTURE=Tests/PresenceCoreTests/Fixtures/idle.json dist/presence-*-macos-universal/presence --json
+          set -- dist/presence-*-macos-universal/presence
+          PRESENCE_FIXTURE=Tests/PresenceCoreTests/Fixtures/idle.json "$1" --json | grep -q '"state":"idle"'

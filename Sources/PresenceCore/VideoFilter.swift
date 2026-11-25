@@ -43,11 +43,14 @@ public struct VideoFilterOptions: Equatable, Sendable {
     public var since: Int64?
     /// Ignore assertions owned by these pids or their descendants.
     public var ignoreTrees: [Int32]
+    /// Process names added to `agentProcesses` for this sample (`--ignore-process`).
+    public var ignoreProcesses: [String]
 
-    public init(ignorePidsStartedAfter: Int64? = nil, since: Int64? = nil, ignoreTrees: [Int32] = []) {
+    public init(ignorePidsStartedAfter: Int64? = nil, since: Int64? = nil, ignoreTrees: [Int32] = [], ignoreProcesses: [String] = []) {
         self.ignorePidsStartedAfter = ignorePidsStartedAfter
         self.since = since
         self.ignoreTrees = ignoreTrees
+        self.ignoreProcesses = ignoreProcesses
     }
 }
 
@@ -63,12 +66,11 @@ public let keepAwakeProcesses: Set<String> = [
 ]
 
 /// Assertions owned by a process under one of these come from agents and builds.
+/// Extend it per call with `--ignore-process NAME`.
 public let agentProcesses: Set<String> = [
     "claude",
     "codex",
     "cursor-agent",
-    "host-run",
-    "ohd",
     "xcodebuild",
 ]
 
@@ -103,6 +105,7 @@ public func filterVideo(
     var video: [VideoAssertion] = []
     var ignored: [IgnoredAssertion] = []
     let trees = Set(options.ignoreTrees)
+    let agents = agentProcesses.union(options.ignoreProcesses)
     for raw in assertions {
         guard displaySleepTypes.contains(raw.type) || raw.trueType.map(displaySleepTypes.contains) == true else { continue }
         let owner = info(raw.pid)
@@ -122,7 +125,7 @@ public func filterVideo(
             reason = .startedAfter
         } else if !trees.isEmpty, chain.contains(where: { trees.contains($0.pid) }) || trees.contains(raw.pid) {
             reason = .ignoredTree
-        } else if chain.contains(where: { agentProcesses.contains($0.info.name) }) {
+        } else if chain.contains(where: { agents.contains($0.info.name) }) {
             reason = .agent
         } else {
             reason = nil

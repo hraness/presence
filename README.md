@@ -1,183 +1,64 @@
 # presence
 
-Is the person at this Mac using it in a way background work would disturb?
+[![CI](https://github.com/hraness/presence/actions/workflows/ci.yml/badge.svg)](https://github.com/hraness/presence/actions/workflows/ci.yml) [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
-`presence` is one small macOS binary that answers with a state, `away`, `idle`, `typing`, `video` or
-`call`, plus the raw readings behind it, so a scheduler can decide whether to run a build, a browser
-suite or a UI test now, later, or somewhere else.
+Tiny macOS CLI that tells you whether someone is using this Mac: away, idle, typing, watching video or on a call.
 
-```console
-$ presence
-typing: typed 4s ago
-$ presence wait --until idle --timeout 30m && make heavy-thing
+Use it to gate builds, tests, backups, notifications and agent work so they never interrupt you. It reads macOS system APIs directly (input idle time, screen lock, displays, microphone, camera, power assertions, screen sharing) and prints one answer. No permissions or prompts, no daemon, no dependencies: one ~600 KB universal binary for macOS 13 and later.
+
+## Install
+
+```sh
+curl -fsSL https://github.com/hraness/presence/releases/download/v0.1.0/presence-0.1.0-macos-universal.tar.gz | tar -xz
+sudo install presence-0.1.0-macos-universal/presence /usr/local/bin/
+swift build -c release              # from source: .build/release/presence
 ```
 
-macOS 13 or later. Swift, no third-party dependencies.
-
-## What it reads
-
-Every signal comes from a system API. Nothing shells out, and **nothing needs a privacy prompt or
-TCC grant** (no Accessibility, Input Monitoring, Microphone, Camera or Screen Recording).
-
-| Fact | Source |
-| --- | --- |
-| `keyIdleSeconds` | `CGEventSourceSecondsSinceLastEventType(hidSystemState, keyDown / flagsChanged)` |
-| `inputIdleSeconds` | the same, for any input event (keys, mouse, trackpad) |
-| `locked` | `CGSessionCopyCurrentDictionary()["CGSSessionScreenIsLocked"]` |
-| `displaysOnline`, `displaysAwake` | `CGGetOnlineDisplayList`, `CGDisplayIsAsleep` |
-| `microphone` | CoreAudio `kAudioDevicePropertyDeviceIsRunningSomewhere` on devices with input streams |
-| `camera` | CoreMediaIO `kCMIODevicePropertyDeviceIsRunningSomewhere` |
-| `video`, `videoIgnored` | `IOPMCopyAssertionsByProcess`, display-sleep assertions only |
-| `screenSharing` | whether `screensharingd` is running (one `sysctl` over the process table) |
-
-The microphone and camera flags say that a device is open somewhere, not what it hears or sees.
-
-Each probe runs off the main thread with a deadline. A probe that misses it is abandoned (the next
-sample waits for that same read rather than starting another) and its fact is reported as `null`.
-The CoreAudio and CoreMediaIO reads can stall for many seconds on a loaded Mac, so they have their own
-deadline, `--device-timeout-ms` (default 1500). A first sample costs about 40 ms; warm samples inside
-`watch` cost about 5 ms.
-
-### Video filters
-
-A display-sleep assertion (`PreventUserIdleDisplaySleep`, `NoDisplaySleepAssertion`) usually means
-media is playing. Some are not, and land in `videoIgnored` with a reason instead:
-
-| `ignoredBecause` | When |
-| --- | --- |
-| `keep-awake` | the owner is a keep-awake utility: Amphetamine, Amphetamine Enhancer, caffeinate, KeepingYouAwake, Lungo, powerd, Theine |
-| `since` | the assertion was created at or after `--since` |
-| `started-after` | the owning process started at or after `--ignore-pids-started-after` |
-| `ignored-tree` | the owner is a pid passed to `--ignore-tree`, or descends from one |
-| `agent` | the owner is, or descends from, claude, codex, cursor-agent, host-run, ohd or xcodebuild |
-
-The first matching reason wins, in that order.
-
-## How a state is chosen
-
-First match wins. Unknown (`null`) facts err toward busy.
-
-1. `away`: screen locked, no display online (lid closed), or every display asleep.
-2. `call`: camera on; microphone or camera unknown; screen sharing (or unknown); microphone on.
-3. `video`: a display-sleep assertion survives the filters, or assertions could not be read.
-4. `typing`: a key within `--key-idle-minutes` (default 5), or key idle time unknown.
-5. `idle`: otherwise.
-
-`busy` is true for `typing`, `video` and `call`. Mouse movement alone does not count as typing; use
-`inputIdleSeconds` or `wait --idle-minutes` for that.
+Releases include a `.sha256` file and a build provenance attestation (`gh attestation verify <tarball> --repo hraness/presence`).
 
 ## Usage
 
-```
-presence [--json] [options]
-presence watch [--json] [--every-sample] [options]
-presence wait --until idle|away [--idle-minutes N] [--timeout DUR] [options]
-```
-
-| Option | Meaning |
-| --- | --- |
-| `--json` | print JSON: one object, or NDJSON (one object per line) for `watch` |
-| `--key-idle-minutes N` | a key press within N minutes counts as typing (default 5) |
-| `--ignore-pids-started-after MS` | ignore display assertions from processes started at or after MS (epoch ms) |
-| `--since MS` | ignore display assertions created at or after MS (epoch ms) |
-| `--ignore-tree PID` | ignore display assertions from PID and its descendants; repeatable |
-| `--device-timeout-ms N` | deadline for the microphone and camera reads (default 1500) |
-| `--interval SECONDS` | poll interval for `watch` and `wait` (default 2) |
-| `--every-sample` | `watch`: print every sample, not only state changes |
-| `--until idle\|away` | `wait`: `idle` is satisfied by idle or away; `away` only by away |
-| `--idle-minutes N` | `wait`: also require no input of any kind for N minutes while unlocked (default 0) |
-| `--timeout DUR` | `wait`: give up after DUR (`90`, `90s`, `500ms`, `5m`, `1h30m`) |
-
-`watch` prints the first sample, then a line each time the state changes (or every sample with
-`--every-sample`). It sleeps between samples; one long-lived `watch --json --every-sample` is the
-cheapest way to poll every 2 s. `wait` prints the final sample when it exits.
-
-### Exit codes
-
-| Code | Meaning |
-| --- | --- |
-| 0 | sampled (or `wait` reached its target) |
-| 1 | runtime failure, such as an unreadable `PRESENCE_FIXTURE` |
-| 2 | bad arguments |
-| 3 | the GUI session cannot be read (over ssh, or no one logged in at the console); `--json` still prints `available: false` |
-| 124 | `wait` timed out |
-
-`watch` keeps running when the session becomes unavailable and reports it as a state change.
-
-## JSON (schema version 1)
-
-```json
-{
-  "available": true,
-  "busy": false,
-  "facts": {
-    "available": true,
-    "camera": false,
-    "displaysAwake": 1,
-    "displaysOnline": 1,
-    "elapsedMs": 4.6,
-    "inputIdleSeconds": 412.08,
-    "keyIdleSeconds": 412.08,
-    "locked": false,
-    "microphone": false,
-    "screenSharing": false,
-    "source": "system",
-    "unavailableReason": null,
-    "video": [],
-    "videoIgnored": [
-      { "assertionName": "Amphetamine (Single-Use - Display)", "ignoredBecause": "keep-awake",
-        "pid": 1908, "process": "Amphetamine", "since": 1795434761724 }
-    ]
-  },
-  "reason": "owner idle 6m, no video or call",
-  "sampledAt": 1795646489135,
-  "schemaVersion": 1,
-  "state": "idle"
-}
-```
-
-| Field | Type | Notes |
-| --- | --- | --- |
-| `schemaVersion` | `1` | bumped on any breaking change |
-| `available` | bool | false when the GUI session cannot be read |
-| `state` | `"away" \| "idle" \| "typing" \| "video" \| "call" \| null` | null only when unavailable |
-| `busy` | bool or null | true for typing, video, call; null when unavailable |
-| `reason` | string | short human reason; wording may change, do not parse it |
-| `sampledAt` | int | epoch ms |
-| `facts.keyIdleSeconds`, `facts.inputIdleSeconds` | number or null | |
-| `facts.locked` | bool or null | |
-| `facts.displaysOnline`, `facts.displaysAwake` | int or null | |
-| `facts.microphone`, `facts.camera`, `facts.screenSharing` | bool or null | null: did not answer in time |
-| `facts.video` | array or null | `{pid, process, assertionName, since}`, after filters; `since` is `AssertStartWhen` in epoch ms or null |
-| `facts.videoIgnored` | array | the same fields plus `ignoredBecause` |
-| `facts.source` | `"system" \| "fixture"` | |
-| `facts.elapsedMs` | number | time the sample took |
-| `facts.available`, `facts.unavailableReason` | bool, string or null | |
-
-Every key is always present; unknown values are `null`, never missing. Keys are sorted. New fields
-may be added within version 1.
-
-## Testing without a live machine
-
-`PRESENCE_FIXTURE=<file.json>` replaces every probe with a JSON file of facts, reread on every
-sample, so `watch` and `wait` can be driven by rewriting it. Missing keys take idle defaults. A
-fixture can also carry raw `assertions` and a `processes` table, and then the video filters run on
-them; see `Tests/PresenceCoreTests/Fixtures/`.
-
-```console
-$ echo '{"camera": true}' > /tmp/call.json
-$ PRESENCE_FIXTURE=/tmp/call.json presence
-call: camera in use
-```
-
-## Building
-
 ```sh
-swift build -c release
-swift test                 # needs Xcode (swift-testing), not only the Command Line Tools
-./scripts/release.sh       # universal arm64 + x86_64 binary and tarball with sha256 in dist/
+presence                                   # typing: typed 4s ago
+presence --json | jq -r .state             # idle
+presence wait --until idle && make         # run the build once nobody is typing, watching or calling
+presence watch --json                      # one JSON line per state change
+presence wait --until away --timeout 50m && restic backup ~   # from an hourly LaunchAgent; cron may not see the GUI session
+if presence wait --until idle --timeout 0; then brew upgrade; else echo later; fi   # 0 = idle now, 124 = busy
 ```
+
+| State | Meaning | Busy |
+| --- | --- | --- |
+| `away` | screen locked, display asleep, or lid closed | no |
+| `idle` | unlocked, but no key pressed for 5 minutes (`--key-idle-minutes`) | no |
+| `typing` | a key pressed recently | yes |
+| `video` | something holds the display awake, like a video player (keep-awake tools and agents are filtered) | yes |
+| `call` | camera, microphone or screen sharing in use | yes |
+
+Exit codes: 0 ok, 1 failure, 2 bad arguments, 3 no GUI session (for example over ssh), 124 `wait` timed out. Every option, the JSON schema (`schemaVersion: 1`) and the fixture format for tests are in [docs/reference.md](docs/reference.md).
+
+## Compared with
+
+[beengone](https://brettterpstra.com/projects/beengone/) reports idle time only; [dstat](https://github.com/luckman212/dstat) and [amiunlocked](https://github.com/raygesualdo/amiunlocked) report lock state only; [OverSight](https://objective-see.org/products/oversight.html), [On Air](https://github.com/maxchuquimia/onair) and Micro Snitch are GUI apps for the microphone or camera; [available](https://github.com/jonesiscoding/available) covers interruptibility but needs root and reads files. presence reads all of these signals in one call, with no root and no prompts.
+
+## FAQ
+
+**How do I check if my Mac is idle from the command line?**
+Run `presence`; it prints `idle` when nobody has typed for 5 minutes, or use `presence --json | jq .facts.inputIdleSeconds` for the raw seconds since any input.
+
+**How do I detect if the camera or microphone is in use on macOS?**
+`presence --json | jq '.facts | {camera, microphone}'` reads CoreAudio and CoreMediaIO "running somewhere" flags, which need no camera or microphone permission.
+
+**How do I run a command only when I'm away from my Mac?**
+`presence wait --until away && your-command` blocks until the screen locks or the display sleeps; add `--timeout 1h` to give up (exit 124).
+
+**Does it need Accessibility, Input Monitoring or root?**
+No. Every signal comes from an API that works without a TCC grant, so it never shows a prompt.
+
+## Contributing
+
+Issues and pull requests are welcome; `scripts/test.sh` (swift test with Xcode) must pass. Security reports: see [SECURITY.md](SECURITY.md).
 
 ## License
 
-MIT
+[MIT](LICENSE)
